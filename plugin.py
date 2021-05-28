@@ -110,52 +110,56 @@ class DotbotAptGet(dotbot.Plugin):
             custom - update - packages
 
         Args:
-            workflow (dict): dictionary with keys 'custom', 'update', or
+            workflow (dict): dictionary with keys 'bash', 'update', or
             'packages'
 
         Returns:
             bool: True if commands succeeded or _bail was set to false
         """
 
-        if 'custom' in workflow:
-            for custom_cmd in workflow['custom']:
-                if custom_cmd is None:
-                    continue
+        for custom_cmd in workflow.get('bash', []):
+            if custom_cmd is None:
+                continue
 
-                ret, output = self._run(custom_cmd, shell=True)
-                if ret != 0:
-                    self._log.error(output.decode())
-                    if self._bail:
-                        return False
-                else:
-                    self._log.lowinfo(output.decode())
+            self._log.lowinfo(custom_cmd)
+            ret, output = self._run(custom_cmd, shell=True)
+            if ret != 0:
+                self._log.error(output.decode())
+                if self._bail:
+                    return False
+            else:
+                self._log.lowinfo(output.decode())
 
-        if 'update' in workflow:
-            if workflow['update'] == True:
-                if self._update() is False:
-                    self._log.error("apt-get update failed")
+        if workflow.get('update', False) == True:
+            if self._update() is False:
+                self._log.error("apt-get update failed")
+                if self._bail:
                     return False
 
-        if 'packages' in workflow:
-            for package in workflow['packages']:
-                apt_result = self._install(package)
-                if apt_result < AptGetOutput.SUCCESSFULLY_INSTALLED and self._bail == True:
-                    self._log.error("Failed to install {}, bailing because option bail was set to True"
-                        .format(package))
-                    return False
-                elif apt_result < AptGetOutput.SUCCESSFULLY_INSTALLED:
-                    self._log.error("Failed to install {}, but continuing anyways"
-                        .format(package))
+        for package in workflow.get('packages', []):
+            apt_result = self._install(package)
+
+            if apt_result < AptGetOutput.SUCCESSFULLY_INSTALLED and self._bail == True:
+                self._log.error("Failed to install {}, bailing because option bail was set to True"
+                    .format(package))
+                return False
+
+            elif apt_result < AptGetOutput.SUCCESSFULLY_INSTALLED:
+                self._log.error("Failed to install {}, but continuing anyways"
+                    .format(package))
+            else:
+                self._log.info("{} installed..".format(package))
 
         return True
 
     def handle(self, _, data):
-        if 'options' in data:
-            if 'bail' in data['options']:
+
+        if 'bail' in data.get('options', ''):
+            if  data['options']['bail'] == True:
                 self._bail = True
-        if 'workflows' in data:
-            for flows in data['workflows']:
-                for key in flows:
-                    self.handle_workflow(flows[key])
+
+        for flows in data.get('workflows', ''):
+            for key in flows:
+                self.handle_workflow(flows[key])
 
         return True
